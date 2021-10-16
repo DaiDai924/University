@@ -1,0 +1,58 @@
+/var/log/auth.log | sed -e 's/Jan/01/1' -e 's/Feb/02/1' -e 's/Mar/03/1' -e 's/Apr/04/1' -e 's/May/05/1' -e 's/Jun/06/1' -e 's/Jul/07/1' -e 's/Aug/08/1' -e 's/Sep/09/1' -e 's/Oct/10/1' -e 's/Nov/11/1' -e 's/Dec/12/1' | awk '
+BEGIN { idx_id = 1; idx2 = 1; idx_usr = 1}
+{
+# Q1
+	if (substr($5,0,4) == "sshd" && $6" "$7" "$8" "$9 == "error: PAM: Authentication error") {
+		illegal_ips[$NF]++;
+		idx_id = $NF
+	}
+	if ($5 == "syslogd:" && $6" "$7" "$8== "last message repeated") {
+		illegal_ips[idx_id]++;
+	}
+# Q2
+	idx_col = 1;
+	while (idx_col <= NF && substr($idx_col,0,7) != "COMMAND" )
+		idx_col++;
+	if (idx_col <= NF) {
+		users[idx2] = $6;
+		com = substr($idx_col, 9)
+		for (idx_col = idx_col + 1; idx_col <= NF; idx_col++)
+			com = com " " $idx_col
+		commands[idx2] = com
+		dates[idx2] = $1"-"$2" "$3
+		idx2++;
+	}
+# Q3
+	if (substr($5,0,4) == "sshd" && $6" "$7" "$8" "$9 == "error: PAM: Authentication error") {
+		illegal_users[$11]++;
+		idx_usr = $11
+	}
+	if ($5 == "syslogd:" && $6" "$7" "$8== "last message repeated") {
+		illegal_users[idx_usr]++;
+	}
+}
+END {
+	for (cnt = 1; cnt < 4; cnt++) {
+		if (cnt == 1) {
+			output = "";
+			filename = "audit_ip.txt";
+			for (i in illegal_ips)
+				output = output i " failed to log in " illegal_ips[i] " times\n"
+		}
+		else if (cnt == 2) {
+			output = "";
+			filename = "audit_sudo.txt";
+			for (i = 1; i < length(users); i++)
+				output = output users[i] " used sudo to do `" commands[i] "` on 2021-" dates[i] "\n";
+			output = output users[i] " used sudo to do `" commands[i] "` on 2021-" dates[i];
+		}
+		else if (cnt == 3) {
+			output = "";
+			filename = "audit_user.txt";
+			for (i in illegal_users)
+				output = output i " failed to log in " illegal_users[i] " times\n"
+		}
+		print output > filename;
+	}
+}
+'
