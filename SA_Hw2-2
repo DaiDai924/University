@@ -1,0 +1,327 @@
+#/bin/bash
+
+OK=0
+CANCEL=1
+ALL=3
+ESC=255
+
+Entrance_Page(){
+    #while :
+    #do {
+        Selection=$(dialog --title "System Info Panel" --clear \
+            --cancel-label "Cancel" \
+            --menu "Please select the command you want to use" 12 45 5 \
+            1 "POST ANNOUNCEMENT" \
+            2 "USER LIST" \
+            2>&1 > /dev/tty)
+
+        result=$?
+        if [ $result -eq $OK ]; then
+            SelectEntrance $Selection
+        elif [ $result -eq $CANCEL ] || [ $result -eq $ESC ]; then
+            Exit
+        fi
+    #} done
+}
+
+SelectEntrance(){
+    Choice=$1
+
+    case $Choice in
+        1)  # Option 1
+            Announcement_UserList
+            ;;
+        2)  # Option 2
+            Users_UserList
+            ;;
+    esac
+}
+
+Announcement_UserList(){
+    Users=$(grep -v ^'#' /etc/passwd | grep -v "nologin" | awk -F':' '{print $1 " " $3 " off"}')
+    Received=$(dialog --title "POST ANNOUNCEMENT" --extra-button --extra-label "ALL" --clear \
+    --checklist "Please choose who you want to post:" 15 70 5 \
+    $Users \
+    2>&1 > /dev/tty)
+    result=$?
+    
+    if [ $result -eq $CANCEL ] || [ $result -eq $ESC ]; then
+        Entrance_Page
+    elif [ $result -eq $ALL ]; then
+        All=$(grep -v ^'#' /etc/passwd | grep -v "nologin" | awk -F':' '{print $1}' | tr ' ' '\n')
+        TypingMessage "$All"
+    elif [ $result -eq $OK ]; then
+        TypingMessage "$Received"
+    fi
+}
+
+TypingMessage(){
+    Received=$1
+    Input=$(dialog --title "Post an announcement" --clear \
+    --inputbox "Enter your messages:" 15 70 \
+    2>&1 > /dev/tty)
+    result=$?
+
+    if [ $result -eq $CANCEL ]; then
+        Entrance_Page
+    elif [ $result -eq $OK ]; then
+        users=$(echo "$Received" | tr '\n' ',')
+        sudo pw groupadd broadcast -M "$users"
+        sudo pw groupshow broadcast
+        echo "$Input" | wall -g broadcast
+        sudo pw groupdel broadcast
+
+        Entrance_Page
+    fi
+}
+
+Users_UserList(){
+    grep -v ^'#' /etc/passwd | grep -v "nologin" | awk -F':' '{print $1 " " $3}' > loginable
+    who | awk '{print $1}' > online
+    users=$(awk 'NR==FNR{a[$1]="[*]"}NR>FNR{print $0 a[$1]}' online loginable)
+    rm loginable online
+    
+    User=$(dialog --ok-label "SELECT" --cancel-label "EXIT" --clear \
+        --menu "User Info Panel" 12 45 5 \
+        $users \
+        2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    elif [ $result -eq $CANCEL ]; then
+        Entrance_Page
+    fi
+}
+
+UserAction(){
+    User=$1
+    Lock=$(sudo cat /etc/master.passwd | grep "LOCKED" | grep ^$User)
+    ret=$?
+
+    if [ $ret -eq 1 ];then
+        Action=$(dialog --cancel-label "EXIT" --clear \
+            --menu "User vagrant" 12 45 5 \
+            1 "LOCK IT" \
+            2 "GROUP INFO" \
+            3 "PORT INFO" \
+            4 "LOGIN HISTORY" \
+            5 "SUDO LOG" \
+            2>&1 > /dev/tty)
+    else
+        Action=$(dialog --cancel-label "EXIT" --clear \
+            --menu "User vagrant" 12 45 5 \
+            1 "UNLOCK IT" \
+            2 "GROUP INFO" \
+            3 "PORT INFO" \
+            4 "LOGIN HISTORY" \
+            5 "SUDO LOG" \
+            2>&1 > /dev/tty)
+    fi
+
+    result=$?
+    if [ $result -eq $OK ]; then
+        SelectAction $User $Action $ret
+    elif [ $result -eq $CANCEL ]; then
+        Users_UserList
+    fi
+}
+
+SelectAction(){
+    User=$1
+    Action=$2
+    ret=$3
+    case $Action in
+        1)
+            if [ $ret -eq 1 ]; then
+                LockIt $User
+            else
+                UnlockIt $User
+            fi
+            ;;
+        2)
+            GroupInfo $User
+            ;;
+        3)
+            PortInfo $User
+            ;;
+        4)
+            LoginHistory $User
+            ;;
+        5)
+            SudoLog $User
+            ;;
+    esac
+}
+
+LockIt(){
+    User=$1
+    Msg=$(dialog --title "LOCK IT" --clear \
+    --yesno "Are you sure you want to do this?" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        sudo pw lock $User
+        LockSuccess $User
+    elif [ $result -eq $CANCEL ]; then
+        UserAction $User
+    fi
+}
+
+LockSuccess(){
+    User=$1
+    Msg=$(dialog --title "LOCK IT" --clear \
+    --msgbox "LOCK SUCCEED!" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    fi
+}
+
+UnlockIt(){
+    User=$1
+    Msg=$(dialog --title "UNLOCK IT" --clear \
+    --yesno "Are you sure you want to do this?" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        sudo pw unlock $User
+        UnlockSuccess $User
+    elif [ $result -eq $CANCEL ]; then
+        UserAction $User
+    fi
+}
+
+UnlockSuccess(){
+    User=$1
+    Msg=$(dialog --title "UNLOCK IT" --clear \
+    --msgbox "UNLOCK SUCCEED!" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    fi
+}
+
+GroupInfo(){
+    User=$1
+    Outputs=$(id $User | awk 'BEGIN{print "GROUP_ID GROUP_NAME"} {split(substr($3,8),groups,","); for (i in groups) { split(groups[i],id,"("); print id[1] " " substr(id[2],1,length(id[2])-1);} }')
+    Msg=$(dialog --title "GROUP" --yes-label "OK" --no-label "EXPORT" --clear \
+    --yesno "$Outputs" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    elif [ $result -eq $CANCEL ]; then
+        TypingPath "$Outputs"
+    fi
+}
+
+PortInfo(){
+    User=$1
+    ports=$(sockstat -4 | grep ^$User | awk '{print $3 " " $5 "_" $6}')
+    Port=$(dialog --clear \
+        --menu "User Info Panel" 12 45 5 \
+        $ports \
+        2>&1 > /dev/tty)
+
+    result=$?
+    if [ $result -eq $ESC ]; then
+        PortError $User
+    elif [ $result -eq $OK ]; then
+        PortAction $User $Port
+    elif [ $result -eq $CANCEL ]; then
+        UserAction $User
+    fi
+}
+
+PortError(){
+    User=$1
+    Msg=$(dialog --title "PORT ERROR" --clear \
+    --msgbox "$User has no ports!" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    fi
+}
+
+PortAction(){
+    User=$1
+    Port=$2
+    Outputs=$(ps -o user -o pid -o ppid -o stat -o %cpu -o %mem -o command $Port | sed '1d' | grep ^$User | awk '{print "USER " $1 "\nPID " $2 "\nPPID " $3 "\nSTAT " $4 "\n%CPU " $5 "\n%MEM " $6 "\nCOMMAND " $7}')
+    Msg=$(dialog --title "PROCESS STATE: $Port" --yes-label "OK" --no-label "EXPORT" --clear \
+    --yesno "$Outputs" 20 150\
+    2>&1 > /dev/tty)
+    result=$?
+
+    if [ $result -eq $OK ]; then
+        PortInfo $User
+    elif [ $result -eq $CANCEL ]; then
+        TypingPath "$Outputs"
+    fi
+}
+
+LoginHistory(){
+    User=$1
+    Outputs=$(last | grep ^$User | awk 'BEGIN {print "DATE IP"}{if ($3 ~ /[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*/) {print $4 " " $5 " " $6 " " $7 " " $3 }}' | sed '12,$d')
+    Msg=$(dialog --title "LOGIN HISTORY" --yes-label "OK" --no-label "EXPORT" --clear \
+    --yesno "$Outputs" 20 150\
+    2>&1 > /dev/tty)
+    
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    elif [ $result -eq $CANCEL ]; then
+        TypingPath "$Outputs"
+    fi
+}
+
+SudoLog(){
+    User=$1
+    Outputs=$(sudo cat /var/log/auth.log  | awk '{ split($0, command, ";"); for (i in command) { if (command[i] ~ /.*COMMAND=.*/) { print $6 " used sudo to do `" substr(command[i],index(command[i], "COMMAND=")+8) " on " $1" "$2" "$3;}}}' | grep ^$User)
+    Msg=$(dialog --title "SUDO LOG" --yes-label "OK" --no-label "EXPORT" --clear \
+    --yesno "$Outputs" 30 150 \
+    2>&1 > /dev/tty)
+    
+    #sudo cat /var/log/auth.log | awk '{print $1" "$2" "$3}'
+    #date -j -f "%b %d %T" "Oct 11 12:34:20" "+%s"
+    #date "+%s" | awk '{print($0 -259200)}' > lastmonth
+
+    result=$?
+    if [ $result -eq $OK ]; then
+        UserAction $User
+    elif [ $result -eq $CANCEL ]; then
+        TypingPath "$Outputs"
+    fi
+}
+
+TypingPath(){
+    Msg=$1
+    Path=$(dialog --title "Export to file" --clear \
+    --inputbox "Enter the path:" 15 70 \
+    2>&1 > /dev/tty)
+    result=$?
+
+    if [ $result -eq $CANCEL ]; then
+        Entrance_Page
+    elif [ $result -eq $OK ]; then
+        echo "$Msg" > $Path
+        Entrance_Page
+    fi
+}
+
+Exit(){
+    clear
+    echo "Program Terminated."
+    exit
+}
+
+Entrance_Page
