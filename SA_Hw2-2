@@ -315,9 +315,12 @@ SudoLog(){
 
     sudo cat /var/log/auth.log  | awk '{ split($0, command, ";"); for (i in command) { if (command[i] ~ /.*COMMAND=.*/) { print $6 " used sudo to do `" substr(command[i],index(command[i], "COMMAND=")+8) " on " $1" "$2" "$3;}}}' | grep ^$User > all_sudo
     now=$(date "+%s" | awk '{ print($0 - 259200)}')
+    dates=$(sudo cat /var/log/auth.log  | awk '{print $1$2$3}')
+    echo "" > dates_file
     for i in $dates; do
         date -j -f "%b%d%T" $i "+%s" | awk '{print $0 "," "'$i'"}' >> dates_file
     done
+    cat dates_file
     cat dates_file | awk '{split($0,t,","); if(t[1] -gt "'$now'") print t[2]}' > month_id
     Outputs=$(awk 'NR==FNR{a[$1]="exist"}NR>FNR{time=substr($0,index($0, "on")+3); gsub(" ", "", time); ; if(a[time]=="exist") print $0}' month_id all_sudo)
     rm all_sudo dates_file month_id
