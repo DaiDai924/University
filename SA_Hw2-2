@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/sh
 
 OK=0
 CANCEL=1
@@ -6,22 +6,21 @@ ALL=3
 ESC=255
 
 Entrance_Page(){
-    #while :
-    #do {
-        Selection=$(dialog --title "System Info Panel" --clear \
-            --cancel-label "Cancel" \
-            --menu "Please select the command you want to use" 12 45 5 \
-            1 "POST ANNOUNCEMENT" \
-            2 "USER LIST" \
-            2>&1 > /dev/tty)
+    Selection=$(dialog --title "System Info Panel" --clear \
+        --cancel-label "Cancel" \
+        --menu "Please select the command you want to use" 12 45 5 \
+        1 "POST ANNOUNCEMENT" \
+        2 "USER LIST" \
+        2>&1 > /dev/tty)
 
-        result=$?
-        if [ $result -eq $OK ]; then
-            SelectEntrance $Selection
-        elif [ $result -eq $CANCEL ] || [ $result -eq $ESC ]; then
-            Exit
-        fi
-    #} done
+    result=$?
+    if [ $result -eq $OK ]; then
+        SelectEntrance $Selection
+    elif [ $result -eq $CANCEL ]; then
+        Exit
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
+    fi
 }
 
 SelectEntrance(){
@@ -45,13 +44,16 @@ Announcement_UserList(){
     2>&1 > /dev/tty)
     result=$?
     
-    if [ $result -eq $CANCEL ] || [ $result -eq $ESC ]; then
+    
+    if [ $result -eq $CANCEL ]; then
         Entrance_Page
     elif [ $result -eq $ALL ]; then
         All=$(grep -v ^'#' /etc/passwd | grep -v "nologin" | awk -F':' '{print $1}' | tr ' ' '\n')
         TypingMessage "$All"
     elif [ $result -eq $OK ]; then
         TypingMessage "$Received"
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -67,11 +69,11 @@ TypingMessage(){
     elif [ $result -eq $OK ]; then
         users=$(echo "$Received" | tr '\n' ',')
         sudo pw groupadd broadcast -M "$users"
-        sudo pw groupshow broadcast
         echo "$Input" | wall -g broadcast
         sudo pw groupdel broadcast
-
         Entrance_Page
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -91,6 +93,8 @@ Users_UserList(){
         UserAction $User
     elif [ $result -eq $CANCEL ]; then
         Entrance_Page
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -124,6 +128,8 @@ UserAction(){
         SelectAction $User $Action $ret
     elif [ $result -eq $CANCEL ]; then
         Users_UserList
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -166,6 +172,8 @@ LockIt(){
         LockSuccess $User
     elif [ $result -eq $CANCEL ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -178,6 +186,8 @@ LockSuccess(){
     result=$?
     if [ $result -eq $OK ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -193,6 +203,8 @@ UnlockIt(){
         UnlockSuccess $User
     elif [ $result -eq $CANCEL ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -205,6 +217,8 @@ UnlockSuccess(){
     result=$?
     if [ $result -eq $OK ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -220,11 +234,15 @@ GroupInfo(){
         UserAction $User
     elif [ $result -eq $CANCEL ]; then
         TypingPath "$Outputs"
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
 PortInfo(){
     User=$1
+    port_exist=$(sockstat -4 | grep ^$User)
+    ret=$?
     ports=$(sockstat -4 | grep ^$User | awk '{print $3 " " $5 "_" $6}')
     Port=$(dialog --clear \
         --menu "User Info Panel" 12 45 5 \
@@ -232,12 +250,14 @@ PortInfo(){
         2>&1 > /dev/tty)
 
     result=$?
-    if [ $result -eq $ESC ]; then
+    if [ $ret -eq 1 ]; then
         PortError $User
     elif [ $result -eq $OK ]; then
         PortAction $User $Port
     elif [ $result -eq $CANCEL ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -250,6 +270,8 @@ PortError(){
     result=$?
     if [ $result -eq $OK ]; then
         UserAction $User
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -266,6 +288,8 @@ PortAction(){
         PortInfo $User
     elif [ $result -eq $CANCEL ]; then
         TypingPath "$Outputs"
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -281,25 +305,34 @@ LoginHistory(){
         UserAction $User
     elif [ $result -eq $CANCEL ]; then
         TypingPath "$Outputs"
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
 SudoLog(){
     User=$1
-    Outputs=$(sudo cat /var/log/auth.log  | awk '{ split($0, command, ";"); for (i in command) { if (command[i] ~ /.*COMMAND=.*/) { print $6 " used sudo to do `" substr(command[i],index(command[i], "COMMAND=")+8) " on " $1" "$2" "$3;}}}' | grep ^$User)
+
+    sudo cat /var/log/auth.log  | awk '{ split($0, command, ";"); for (i in command) { if (command[i] ~ /.*COMMAND=.*/) { print $6 " used sudo to do `" substr(command[i],index(command[i], "COMMAND=")+8) " on " $1" "$2" "$3;}}}' | grep ^$User > all_sudo
+    now=$(date "+%s" | awk '{ print($0 - 259200)}')
+    for i in $dates; do
+        date -j -f "%b%d%T" $i "+%s" | awk '{print $0 "," "'$i'"}' >> dates_file
+    done
+    cat dates_file | awk '{split($0,t,","); if(t[1] -gt "'$now'") print t[2]}' > month_id
+    Outputs=$(awk 'NR==FNR{a[$1]="exist"}NR>FNR{time=substr($0,index($0, "on")+3); gsub(" ", "", time); ; if(a[time]=="exist") print $0}' month_id all_sudo)
+    rm all_sudo dates_file month_id
+    
     Msg=$(dialog --title "SUDO LOG" --yes-label "OK" --no-label "EXPORT" --clear \
     --yesno "$Outputs" 30 150 \
     2>&1 > /dev/tty)
-    
-    #sudo cat /var/log/auth.log | awk '{print $1" "$2" "$3}'
-    #date -j -f "%b %d %T" "Oct 11 12:34:20" "+%s"
-    #date "+%s" | awk '{print($0 -259200)}' > lastmonth
 
     result=$?
     if [ $result -eq $OK ]; then
         UserAction $User
     elif [ $result -eq $CANCEL ]; then
         TypingPath "$Outputs"
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
@@ -315,13 +348,21 @@ TypingPath(){
     elif [ $result -eq $OK ]; then
         echo "$Msg" > $Path
         Entrance_Page
+    elif [ $result -eq $ESC ]; then
+        >&2 echo "Esc pressed. "
     fi
 }
 
 Exit(){
     clear
-    echo "Program Terminated."
+    echo "Exit."
     exit
 }
 
+trap_ctrlc(){
+    echo "Ctrl + C pressed. "
+    exit 0
+}
+
+trap 'trap_ctrlc' SIGINT
 Entrance_Page
