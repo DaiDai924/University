@@ -345,7 +345,7 @@ TypingPath(){
     2>&1 > /dev/tty)
     result=$?
 
-    Usr=$(who | awk '{print $1}' | tr ' ' '\n' | uniq)
+    Usr=$(whoami | awk '{print $1}')
     home_path=$(grep -v ^'#' /etc/passwd | grep $Usr | awk -F':' '{print $6}')
     rep=$(echo "$Path" | grep "$Usr")
     if [ $? -eq 1 ]; then
