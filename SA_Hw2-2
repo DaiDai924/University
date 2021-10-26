@@ -320,7 +320,6 @@ SudoLog(){
     for i in $dates; do
         date -j -f "%b%d%T" $i "+%s" | awk '{print $0 "," "'$i'"}' >> dates_file
     done
-    cat dates_file
     cat dates_file | awk '{split($0,t,","); if(t[1] -gt "'$now'") print t[2]}' > month_id
     Outputs=$(awk 'NR==FNR{a[$1]="exist"}NR>FNR{time=substr($0,index($0, "on")+3); gsub(" ", "", time); ; if(a[time]=="exist") print $0}' month_id all_sudo)
     rm all_sudo dates_file month_id
@@ -345,6 +344,13 @@ TypingPath(){
     --inputbox "Enter the path:" 15 70 \
     2>&1 > /dev/tty)
     result=$?
+
+    Usr=$(who | awk '{print $1}' | tr ' ' '\n' | uniq)
+    home_path=$(grep -v ^'#' /etc/passwd | grep $Usr | awk -F':' '{print $6}')
+    rep=$(echo "$Path" | grep "$Usr")
+    if [ $? -eq 1 ]; then
+        Path="$home_path""/""$Path"
+    fi
 
     if [ $result -eq $CANCEL ]; then
         Entrance_Page
